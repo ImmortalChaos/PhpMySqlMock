@@ -4,6 +4,65 @@ namespace phpMySqlMock;
  * Project Name : phpMySqlMock v0.1
  */
 
+/************************************************
+ * MySql Mock Utility Functions
+ ************************************************/
+function _array_string_push(&$arr, $txt) {
+	if($txt=="") {
+		return;
+	}
+	array_push($arr, $txt);
+}
+
+function _is_order_by($txt) {
+	return $txt=="ASC" || $txt=="DESC";
+}
+
+function _is_separate_query($txt) {
+	return $txt==' ' || $txt==',' || $txt=='(' || $txt==')';
+}
+
+function _is_query_operater($txt) {
+	return ($txt=="=" || $txt=="!=" || $txt=="<" || $txt==">" || $txt=="<=" || $txt==">=");
+}
+
+function _is_separate_and_operator($chr) {
+	return _is_separate_query($chr) || $chr=='=' || $chr=='<' || $chr=='>' || $chr=='!';
+}
+
+function _is_query_section($txt) {
+	return $txt=="SELECT" || $txt=="FROM" || $txt=="INSERT" || $txt=="WHERE" || $txt=="LIMIT" || $txt=="ORDER" || $txt=="VALUES" || $txt=="INTO";
+}
+
+function explodeQuery($query) {
+	$retArr = array();
+	$len = strlen($query);
+	$word = "";
+	$i = 0;
+	do {
+		if(_is_separate_and_operator($query{$i})) {
+			if(!_is_separate_query($query{$i})) {
+				$word.=$query{$i};
+			}
+			_array_string_push($retArr, $word);
+			$word = "";
+		} else if($query{$i}=='"' || $query{$i}=='\'') {
+			$endpos = strpos($query, $query{$i}, $i+1);
+			if($endpos!==false) {
+				$word.=substr($query, $i, $endpos - $i + 1);
+			}
+			$i+= strlen($word)-1;
+		} else if(($i+1)==$len) {
+			array_push($retArr, $word.$query{$i});
+			$word = "";
+		} else {
+			$word .= $query{$i};
+		}
+		$i++;
+	} while($i<$len);
+
+	return $retArr;
+}
 
 /************************************************
  * MySql Mock Class
@@ -23,6 +82,118 @@ class MySqlMockAttribute {
 	const ATTR_ISUNSIGNED = "is_unsigned";
 	const ATTR_FIELDTYPE = "type";
 	const ATTR_FIELDSIZE = "size";
+
+	const QUERY_LIMIT = "LIMIT";
+	const QUERY_SELECT = "SELECT";
+	const QUERY_INSERT = "INSERT";
+	const QUERY_INTO = "INTO";
+	const QUERY_VALUES = "VALUES";
+	const QUERY_FROM = "FROM";
+	const QUERY_WHERE = "WHERE";
+	const QUERY_ORDER = "ORDER";
+}
+
+class MySqlMockParseQuery {
+	public $m_query = array();
+	public function __construct($query) {
+		$this->parseQuery($query);
+	}	
+
+	public function getTableName() {
+		if(isset($this->m_query[MySqlMockAttribute::QUERY_FROM])) {
+			return $this->m_query[MySqlMockAttribute::QUERY_FROM][0];
+		} else if(isset($this->m_query[MySqlMockAttribute::QUERY_INTO])) {
+			return $this->m_query[MySqlMockAttribute::QUERY_INTO][0];
+		}
+
+		return "";
+	}
+
+	private function getSectionValues($section) {
+		if(isset($this->m_query[$section])) {
+			return $this->m_query[$section];
+		}
+
+		return array();
+	}
+	public function getSelect() {
+		return $this->getSectionValues(MySqlMockAttribute::QUERY_SELECT);
+	}
+
+	public function getInsert() {
+		return $this->getSectionValues(MySqlMockAttribute::QUERY_INSERT);
+	}
+
+	public function getValues() {
+		return $this->getSectionValues(MySqlMockAttribute::QUERY_VALUES);
+	}
+
+	public function getWhere() {
+		return $this->getSectionValues(MySqlMockAttribute::QUERY_WHERE);
+	}
+
+	public function getLimit() {
+		return $this->getSectionValues(MySqlMockAttribute::QUERY_LIMIT);
+	}
+
+	public function getOrder() {
+		return $this->getSectionValues(MySqlMockAttribute::QUERY_ORDER);
+	}
+
+	private function parseQueryOrderBy($section, $qArr, $i) {
+		if($section!=MySqlMockAttribute::QUERY_ORDER || $qArr[$i]!="BY" || !isset($qArr[$i+1])) {
+			return 0;
+		}
+
+		$field = $qArr[$i+1];
+		if( isset($qArr[$i+2]) && _is_order_by($qArr[$i+2]) ) {
+			$this->m_query[$section] = array($field, $qArr[$i+2]);
+			return 2;
+		}
+
+		$this->m_query[$section] = array($field, "ASC");
+		return 1;
+	}
+
+	private function parseOperater($section, $qArr, $i) {
+		if($section!=MySqlMockAttribute::QUERY_WHERE) {
+			return 0;
+		}
+
+		$operater = isset($qArr[$i+1])?$qArr[$i+1]:"";
+		$value = isset($qArr[$i+2])?$qArr[$i+2]:"";
+		if(_is_query_operater($operater)) {
+			array_push($this->m_query[$section], array($qArr[$i], $operater, $value));
+			return 2;
+		}
+		return 0;
+	}
+
+	private function parseQuery($query) {
+		$ret = explodeQuery($query);
+		$section = "";
+		$i = 0;
+
+		do {
+			if(_is_query_section($ret[$i])) {
+				$section = $ret[$i];
+				$this->m_query[$section] = array();
+			} else {
+				$offset = 0;
+				$offset+=$this->parseQueryOrderBy($section, $ret, $i);
+				$offset+=$this->parseOperater($section, $ret, $i);
+				if($offset==0) {
+					if($section=="INTO" && count($this->m_query[$section])>0) {
+						$section = MySqlMockAttribute::QUERY_INSERT;
+					}
+					array_push($this->m_query[$section], $ret[$i]);
+				}
+				$i+=$offset;
+			}
+			$i++;
+		} while($i<count($ret));
+	}
+
 }
 
 class MySqlMockList {
