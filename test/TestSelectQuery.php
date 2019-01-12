@@ -16,40 +16,124 @@ final class TestSelectQuery extends TestCase
 	}
 
     /*
-     * @cover mysql_addMockTable
-     * @brief 단순한 테이블을 하나 생성합니다.
+     * @cover mysql_query
+     * @brief 단순한 문장에 대해서 쿼리합니다.
      */
-    public function test_select()
+    public function test_simple_select()
     {
-        $answer_host = "1.2.3.4:1258";
-        $answer_userid = "rabbit6";
-        $answer_password = getEncPassword();
-        $answer_tableName = "simpletbl2";
-        $answer_tableAttr = array(FIELD_SEQ=>mysql_getFSAutoIncrease(),
-                                  FIELD_NAME=>mysql_getFSVarchar(20, false),
-                                  FIELD_AGE=>mysql_getFSInteger(false, true));
-        $answer_tableData1 = array(FIELD_NAME=>"cat", FIELD_AGE=>3);
-        $answer_tableData2 = array(FIELD_NAME=>"tiger", FIELD_AGE=>3);
-        $answer_tableData3 = array(FIELD_NAME=>"black tiger", FIELD_AGE=>2);
-        $answer_tableData4 = array(FIELD_NAME=>"dog", FIELD_AGE=>2);
+        $tableAttr = array(FIELD_SEQ=>mysql_getFSAutoIncrease(),
+                           FIELD_NAME=>mysql_getFSVarchar(20, false),
+                           FIELD_AGE=>mysql_getFSInteger(false, true));
+        $tableData = array(
+                            array(FIELD_NAME=>"cat", FIELD_AGE=>3),
+                            array(FIELD_NAME=>"tiger", FIELD_AGE=>3),
+                            array(FIELD_NAME=>"black tiger", FIELD_AGE=>2),
+                            array(FIELD_NAME=>"dog", FIELD_AGE=>2)
+                        );
 
-        // Success create
-        $mock = mysql_addMock($answer_host, $answer_userid, $answer_password);
-        mysql_addMockTable($mock, $answer_tableName, $answer_tableAttr);
-        $this->assertEquals(mysql_errno($mock), MySqlMockError::NO_ERROR);
-        $this->assertEquals(mysql_addMockData($mock, $answer_tableName, $answer_tableData1), MySqlMockError::NO_ERROR);
-        $this->assertEquals(mysql_addMockData($mock, $answer_tableName, $answer_tableData2), MySqlMockError::NO_ERROR);
-        $this->assertEquals(mysql_addMockData($mock, $answer_tableName, $answer_tableData3), MySqlMockError::NO_ERROR);
-        $this->assertEquals(mysql_addMockData($mock, $answer_tableName, $answer_tableData4), MySqlMockError::NO_ERROR);
+        $conn = basicMockConnection($this, DEFAULT_TABLENAME, $tableAttr, $tableData);
 
-        // Valid Connection
-        $conn = mysql_connect($answer_host, $answer_userid, $answer_password);
-        $this->assertEquals(mysql_errno($conn), MySqlMockError::NO_ERROR);
-
-        $result = mysql_query("SELECT name, age FROM ".$answer_tableName, $conn);
-        
+        $result = mysql_query("SELECT name, age FROM ".DEFAULT_TABLENAME, $conn);
+        $this->assertEquals(mysql_fetch_array($result), array("cat", 3));
+        $this->assertEquals(mysql_fetch_array($result), array("tiger", 3));
+        $this->assertEquals(mysql_fetch_array($result), array("black tiger", 2));
+        $this->assertEquals(mysql_fetch_array($result), array("dog", 2));
 
         mysql_close($conn);
     }
+
+    /*
+     * @cover mysql_query
+     * @brief 단순한 문장에 대해서 쿼리합니다.
+     */
+    public function test_simple_select_where1()
+    {
+       $tableAttr = array(FIELD_SEQ=>mysql_getFSAutoIncrease(),
+                           FIELD_NAME=>mysql_getFSVarchar(20, false),
+                           FIELD_AGE=>mysql_getFSInteger(false, true));
+        $tableData = array(
+                            array(FIELD_NAME=>"rabbit", FIELD_AGE=>3),
+                            array(FIELD_NAME=>"white tiger", FIELD_AGE=>1),
+                            array(FIELD_NAME=>"frog", FIELD_AGE=>2),
+                            array(FIELD_NAME=>"lion", FIELD_AGE=>4)
+                        );
+
+        $conn = basicMockConnection($this, DEFAULT_TABLENAME, $tableAttr, $tableData);
+
+        $result = mysql_query("SELECT name, age FROM ".DEFAULT_TABLENAME." WHERE age < 3", $conn);
+
+        $this->assertEquals(mysql_fetch_array($result), array("white tiger", 1));
+        $this->assertEquals(mysql_fetch_array($result), array("frog", 2));
+
+        mysql_close($conn);
+    }
+
+    /*
+     * @cover mysql_query
+     * @brief 쿼리 구문 오류가 있는 경우
+     */
+    public function test_simple_select_where2()
+    {
+        $conn = basicMockConnection($this, DEFAULT_TABLENAME, getFruitPriceTableStruct(), getFruitPriceTableDatas());
+
+        $result = mysql_query("SELECT name FROM ".DEFAULT_TABLENAME." WHERE price > 1000 xxx color = \"green\"", $conn);
+
+        $this->assertEquals(mysql_errno($conn), MySqlMockError::INVALID_QUERY);
+        $this->assertEquals(mysql_affected_rows($conn), 0);
+
+        mysql_close($conn);
+    }
+
+    /*
+     * @cover mysql_query
+     * @brief 단순한 문장에 대해서 쿼리합니다.
+     */
+    public function test_simple_select_where3()
+    {
+        $conn = basicMockConnection($this, DEFAULT_TABLENAME, getFruitPriceTableStruct(), getFruitPriceTableDatas());
+
+        $result = mysql_query("SELECT name, price, color FROM ".DEFAULT_TABLENAME." WHERE price > 1000 and color = \"green\"", $conn);
+
+        $this->assertEquals(mysql_fetch_array($result), array("orange", 1500, TEXT_GREEN));
+        $this->assertEquals(mysql_fetch_array($result), array("melon", 2500, TEXT_GREEN));
+        $this->assertEquals(mysql_affected_rows($conn), 2);
+
+        mysql_close($conn);
+    }
+
+    /*
+     * @cover mysql_query
+     * @brief 단순한 문장에 대해서 쿼리합니다.
+     */
+    public function test_simple_select_where4()
+    {
+        $conn = basicMockConnection($this, DEFAULT_TABLENAME, getFruitPriceTableStruct(), getFruitPriceTableDatas());
+
+        $result = mysql_query("SELECT name, price, color FROM ".DEFAULT_TABLENAME." WHERE price > 1000 and price < 2000 or color = \"red\"", $conn);
+
+        $this->assertEquals(mysql_fetch_array($result), array("orange", 1500, TEXT_GREEN));
+        $this->assertEquals(mysql_fetch_array($result), array("mango", 1200, TEXT_YELLOW));
+        $this->assertEquals(mysql_fetch_array($result), array("strawberry", 2500, TEXT_RED));
+        $this->assertEquals(mysql_affected_rows($conn), 3);
+
+        mysql_close($conn);
+    }
+
+    /*
+     * @cover mysql_query
+     * @brief 조건에 맞는 데이터가 없는경우
+     */
+    public function test_simple_select_where5()
+    {
+        $conn = basicMockConnection($this, DEFAULT_TABLENAME, getFruitPriceTableStruct(), getFruitPriceTableDatas());
+
+        $result = mysql_query("SELECT name FROM ".DEFAULT_TABLENAME." WHERE price < 500", $conn);
+
+        $this->assertEquals(mysql_affected_rows($conn), 0);
+
+        mysql_close($conn);
+    }
+
+
 }
 
