@@ -34,6 +34,10 @@ function _is_query_section($txt) {
 	return $txt=="SELECT" || $txt=="FROM" || $txt=="INSERT" || $txt=="WHERE" || $txt=="LIMIT" || $txt=="ORDER" || $txt=="VALUES" || $txt=="INTO";
 }
 
+function _is_quote_string($txt) {
+	return $txt=='"' || $txt=='\'';
+}
+
 function explodeQuery($query) {
 	$retArr = array();
 	$len = strlen($query);
@@ -46,18 +50,20 @@ function explodeQuery($query) {
 			}
 			_array_string_push($retArr, $word);
 			$word = "";
-		} else if($query{$i}=='"' || $query{$i}=='\'') {
+			$i++;
+			continue;
+		} else if( _is_quote_string($query{$i}) ) {
 			$endpos = strpos($query, $query{$i}, $i+1);
 			if($endpos!==false) {
 				$word.=substr($query, $i, $endpos - $i + 1);
 			}
 			$i+= strlen($word)-1;
-		} else if(($i+1)==$len) {
-			array_push($retArr, $word.$query{$i});
-			$word = "";
-		} else {
+		} else if(($i+1)!=$len) {
 			$word .= $query{$i};
 		}
+		if(($i+1)==$len) {
+			array_push($retArr, $word.$query{$i});
+		}			
 		$i++;
 	} while($i<$len);
 
@@ -70,6 +76,7 @@ function explodeQuery($query) {
 class MySqlMockError {
 	const NO_ERROR = 0;
 	const CONNECT_FAIL = 1;
+	const INVALID_QUERY = 2;
 	const ERROR = 999;
 }
 
@@ -245,6 +252,29 @@ class MySqlMockList {
 
 }
 
+class MySqlMockFetchObject {
+	public $m_offset = 0;
+	public $m_queryData = array();
+
+	public function __construct() {
+	}
+
+	public function appendData($arrData) {
+		array_push($this->m_queryData, $arrData);
+	}
+
+	public function getCount() {
+		return count($this->m_queryData);
+	}
+
+	public function fetchArray() {
+		if(isset($this->m_queryData[$this->m_offset])) {
+			return $this->m_queryData[$this->m_offset++];
+		}
+
+		return array();
+	}
+}
 
 class MySqlMockObject {
 	public $m_host;
@@ -254,6 +284,7 @@ class MySqlMockObject {
 	public $m_errcode = MySqlMockError::NO_ERROR;
 	public $m_tables = array();
 	public $m_tableData = array();
+	public $m_queryDataObj = NULL;
 	public function __construct($host, $user, $pwd) {
 		$this->m_host = $host;
 		$this->m_userid = $user;
@@ -310,6 +341,159 @@ class MySqlMockObject {
 	public function setError($errno) {
 		$this->m_errcode = $errno;
 		return $this->m_errcode;
+	}
+
+	private function isError() {
+		return $this->m_errcode!=MySqlMockError::NO_ERROR;
+	}
+
+	private function isValidParameter($condition) {
+		if(!isset($condition[2])) {
+			$this->setError(MySqlMockError::INVALID_QUERY);
+			return false;
+		}
+
+		return true;
+	}
+
+	private function checkConditionLessThan($data, $condition) {
+		if(!$this->isValidParameter($condition)) {
+			return false;
+		}
+		return $data[$condition[0]] < $condition[2];
+	}
+
+	private function checkConditionGreaterThan($data, $condition) {
+		if(!$this->isValidParameter($condition)) {
+			return false;
+		}
+		return $data[$condition[0]] > $condition[2];
+	}
+
+	private function checkConditionLessThanEqual($data, $condition) {
+		if(!$this->isValidParameter($condition)) {
+			return false;
+		}
+		return $data[$condition[0]] <= $condition[2];
+	}
+
+	private function checkConditionGreaterThanEqual($data, $condition) {
+		if(!$this->isValidParameter($condition)) {
+			return false;
+		}
+		return $data[$condition[0]] >= $condition[2];
+	}
+
+	private function checkConditionEqual($data, $condition) {
+		if(!$this->isValidParameter($condition)) {
+			return false;
+		}
+		$val = is_string($condition[2])?trim($condition[2],"'\""):$condition[2];
+		return $data[$condition[0]] == $val;
+	}
+
+	private function checkConditionNotEqual($data, $condition) {
+		if(!$this->isValidParameter($condition)) {
+			return false;
+		}
+		$val = is_string($condition[2])?trim($condition[2]):$condition[2];
+		return $data[$condition[0]] != $val;
+	}
+
+	private function checkCondition($data, $condition) {
+		$ret = true;
+		if(count($condition)==1) {
+			return false;
+		}
+
+		switch($condition[1]) {
+			case "<" : $ret = $this->checkConditionLessThan($data, $condition); break;
+			case "<=" : $ret = $this->checkConditionLessThanEqual($data, $condition); break;
+			case ">=" : $ret = $this->checkConditionGreaterThanEqual($data, $condition); break;
+			case ">" : $ret = $this->checkConditionGreaterThan($data, $condition); break;
+			case "=" : $ret = $this->checkConditionEqual($data, $condition); break;
+			case "!=" : $ret = $this->checkConditionNotEqual($data, $condition); break;
+			default :
+				break;
+		}
+
+		return $ret;
+	}
+
+	private function checkConditions($data, $arrWhere) {
+		$index = 0;
+		$result = true;
+		$isAnd = true;	// And(true), Or(false)
+		while($index < count($arrWhere)) {
+			$cond = $arrWhere[$index++];
+			if(is_string($cond)) {
+				if(strtoupper($cond)!="AND" && strtoupper($cond)!="OR") {
+					$this->setError(MySqlMockError::INVALID_QUERY);
+					return false;
+				}
+				$isAnd = strtoupper($cond)=="AND";
+				continue;
+			}
+
+			$bool = $this->checkCondition($data, $cond);
+			if($isAnd) {
+				$result = $result && $bool;
+			} else {
+				$result = $result || $bool;
+			}
+		}
+		return $result;
+	}
+
+	public function getLastQueryResult() {
+		return $this->m_queryDataObj;
+	}
+
+	/**
+	 * @return count of data  
+	 */
+	private function doRunSelectQuery($qryObj) {
+		$this->m_queryDataObj = new MySqlMockFetchObject();
+		$tableName = $qryObj->getTableName();
+
+		foreach($this->m_tableData[$tableName] as $data) {
+			$result = array();
+			// process where
+			if(!$this->checkConditions($data, $qryObj->getWhere())) {
+				continue;
+			}
+
+			if($this->isError()) {
+				return $this->getErrNo();
+			}
+
+			// get select list
+			foreach($qryObj->getSelect() as $key) {
+				array_push($result, $data[$key]);
+			}
+			$this->m_queryDataObj->appendData($result);
+		}
+
+		return $this->m_queryDataObj;
+	}
+
+	private function doRunQueryCommand($qryObj) {
+		$tableName = $qryObj->getTableName();
+
+		// check has table
+		if(!isset($this->m_tableData[$tableName])) {
+			return NULL;
+		}
+
+		if(count($qryObj->getSelect())) {
+			return $this->doRunSelectQuery($qryObj);
+		}
+		return NULL;
+	}
+
+	public function query($qry) {
+		$qryObj = new MySqlMockParseQuery($qry);
+		return $this->doRunQueryCommand($qryObj);
 	}
 }
 
@@ -414,6 +598,19 @@ function mysqli_connect($host, $user, $pwd) {
 
 function mysql_connect($host, $user, $pwd) {
 	return mysqli_connect($host, $user, $pwd);
+}
+
+function mysql_query($query, $conn) {
+	return $conn->query($query);
+}
+
+function mysql_fetch_array($dataObj) {
+	return $dataObj->fetchArray();
+}
+
+function mysql_affected_rows($conn) {
+	$dataObj = $conn->getLastQueryResult();
+	return $dataObj->getCount();
 }
 
 function mysql_error($conn) {
