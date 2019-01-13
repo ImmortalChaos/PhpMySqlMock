@@ -38,6 +38,17 @@ function _is_quote_string($txt) {
 	return $txt=='"' || $txt=='\'';
 }
 
+/**
+ * @brief 배열에 값을 반환합니다. 이때 해당값이 존재하지 않는다면 디폴트값을 반환합니다.
+ */
+function _getArrayVal($arr, $name, $defRet = "") {
+	if(isset($arr[$name]) && $arr[$name]!="") {
+		return $arr[$name];
+	}
+
+	return $defRet;
+}
+
 function explodeQuery($query) {
 	$retArr = array();
 	$len = strlen($query);
@@ -123,6 +134,16 @@ class MySqlMockParseQuery {
 
 		return array();
 	}
+
+	public function getSelectFunction() {
+		$arr = $this->getSectionValues(MySqlMockAttribute::QUERY_SELECT);
+		if(count($arr)!=1) {
+			return "";
+		} 
+
+		return $arr[0];
+	}
+
 	public function getSelect() {
 		return $this->getSectionValues(MySqlMockAttribute::QUERY_SELECT);
 	}
@@ -182,8 +203,8 @@ class MySqlMockParseQuery {
 		$i = 0;
 
 		do {
-			if(_is_query_section($ret[$i])) {
-				$section = $ret[$i];
+			if(_is_query_section(strtoupper($ret[$i]))) {
+				$section = strtoupper($ret[$i]);
 				$this->m_query[$section] = array();
 			} else {
 				$offset = 0;
@@ -467,9 +488,15 @@ class MySqlMockObject {
 				return $this->getErrNo();
 			}
 
+			$func = $qryObj->getSelectFunction();
+			$selectKeys = $qryObj->getSelect();
+			if($func=="*") {
+				$selectKeys = array_keys($this->m_tables[$tableName]);
+			}
+
 			// get select list
-			foreach($qryObj->getSelect() as $key) {
-				array_push($result, $data[$key]);
+			foreach($selectKeys as $key) {
+				$result[$key] = _getArrayVal($data,$key,NULL);
 			}
 			$this->m_queryDataObj->appendData($result);
 		}
