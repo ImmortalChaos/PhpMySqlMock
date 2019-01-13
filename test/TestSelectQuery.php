@@ -34,10 +34,10 @@ final class TestSelectQuery extends TestCase
         $conn = basicMockConnection($this, DEFAULT_TABLENAME, $tableAttr, $tableData);
 
         $result = mysql_query("SELECT name, age FROM ".DEFAULT_TABLENAME, $conn);
-        $this->assertEquals(mysql_fetch_array($result), array("cat", 3));
-        $this->assertEquals(mysql_fetch_array($result), array("tiger", 3));
-        $this->assertEquals(mysql_fetch_array($result), array("black tiger", 2));
-        $this->assertEquals(mysql_fetch_array($result), array("dog", 2));
+        $this->assertEquals(mysql_fetch_array($result), array(FIELD_NAME=>"cat", FIELD_AGE=>3));
+        $this->assertEquals(mysql_fetch_array($result), array(FIELD_NAME=>"tiger", FIELD_AGE=>3));
+        $this->assertEquals(mysql_fetch_array($result), array(FIELD_NAME=>"black tiger", FIELD_AGE=>2));
+        $this->assertEquals(mysql_fetch_array($result), array(FIELD_NAME=>"dog", FIELD_AGE=>2));
 
         mysql_close($conn);
     }
@@ -62,8 +62,8 @@ final class TestSelectQuery extends TestCase
 
         $result = mysql_query("SELECT name, age FROM ".DEFAULT_TABLENAME." WHERE age < 3", $conn);
 
-        $this->assertEquals(mysql_fetch_array($result), array("white tiger", 1));
-        $this->assertEquals(mysql_fetch_array($result), array("frog", 2));
+        $this->assertEquals(mysql_fetch_array($result), array(FIELD_NAME=>"white tiger", FIELD_AGE=>1));
+        $this->assertEquals(mysql_fetch_array($result), array(FIELD_NAME=>"frog", FIELD_AGE=>2));
 
         mysql_close($conn);
     }
@@ -94,8 +94,8 @@ final class TestSelectQuery extends TestCase
 
         $result = mysql_query("SELECT name, price, color FROM ".DEFAULT_TABLENAME." WHERE price > 1000 and color = \"green\"", $conn);
 
-        $this->assertEquals(mysql_fetch_array($result), array("orange", 1500, TEXT_GREEN));
-        $this->assertEquals(mysql_fetch_array($result), array("melon", 2500, TEXT_GREEN));
+        $this->assertEquals(mysql_fetch_array($result), array(FIELD_NAME=>"orange", FIELD_PRICE=>1500, FIELD_COLOR=>TEXT_GREEN));
+        $this->assertEquals(mysql_fetch_array($result), array(FIELD_NAME=>"melon", FIELD_PRICE=>2500, FIELD_COLOR=>TEXT_GREEN));
         $this->assertEquals(mysql_affected_rows($conn), 2);
 
         mysql_close($conn);
@@ -111,9 +111,9 @@ final class TestSelectQuery extends TestCase
 
         $result = mysql_query("SELECT name, price, color FROM ".DEFAULT_TABLENAME." WHERE price > 1000 and price < 2000 or color = \"red\"", $conn);
 
-        $this->assertEquals(mysql_fetch_array($result), array("orange", 1500, TEXT_GREEN));
-        $this->assertEquals(mysql_fetch_array($result), array("mango", 1200, TEXT_YELLOW));
-        $this->assertEquals(mysql_fetch_array($result), array("strawberry", 2500, TEXT_RED));
+        $this->assertEquals(mysql_fetch_array($result), array(FIELD_NAME=>"orange", FIELD_PRICE=>1500, FIELD_COLOR=>TEXT_GREEN));
+        $this->assertEquals(mysql_fetch_array($result), array(FIELD_NAME=>"mango", FIELD_PRICE=>1200, FIELD_COLOR=>TEXT_YELLOW));
+        $this->assertEquals(mysql_fetch_array($result), array(FIELD_NAME=>"strawberry", FIELD_PRICE=>2500, FIELD_COLOR=>TEXT_RED));
         $this->assertEquals(mysql_affected_rows($conn), 3);
 
         mysql_close($conn);
@@ -134,6 +134,20 @@ final class TestSelectQuery extends TestCase
         mysql_close($conn);
     }
 
+    /*
+     * @cover mysql_query
+     * @brief Select 쿼리에 *기호 사용시
+     */
+    public function test_simple_select_where6()
+    {
+        $conn = basicMockConnection($this, DEFAULT_TABLENAME, getFruitPriceTableStruct(), getFruitPriceTableDatas());
 
+        $result = mysql_query("SELECT * FROM ".DEFAULT_TABLENAME." WHERE price < 1100", $conn);
+
+        $this->assertEquals(mysql_fetch_array($result), array(FIELD_SEQ=>2, FIELD_NAME=>"apple", FIELD_COLOR=>TEXT_GREEN, FIELD_PRICE=>1000));
+        $this->assertEquals(mysql_affected_rows($conn), 1);
+
+        mysql_close($conn);
+    }
 }
 
