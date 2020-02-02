@@ -149,5 +149,70 @@ final class TestSelectQuery extends TestCase
 
         mysql_close($conn);
     }
-}
 
+    /*
+		 * like 검색시 %기호가 없는경우 테스트
+     * @cover mysql_query
+     * @brief Select 쿼리에 like 사용시
+     */
+    public function test_like_select_where()
+    {
+        $conn = basicMockConnection($this, DEFAULT_TABLENAME, getFruitPriceTableStruct(), getFruitPriceTableDatas());
+
+        $result = mysql_query("SELECT name, price, color FROM ".DEFAULT_TABLENAME." WHERE name like \"strawberry\"", $conn);
+				$this->assertEquals(mysql_fetch_array($result), array(FIELD_NAME=>"strawberry", FIELD_PRICE=>2500, FIELD_COLOR=>TEXT_RED));
+        $this->assertEquals(mysql_affected_rows($conn), 1);
+
+        mysql_close($conn);
+    }
+
+		/*
+		 * like 검색시 %검색어%일경우 테스트
+     * @cover mysql_query
+     * @brief Select 쿼리에 like 사용시
+     */
+    public function test_like_select_where_all()
+    {
+        $conn = basicMockConnection($this, DEFAULT_TABLENAME, getFruitPriceTableStruct(), getFruitPriceTableDatas());
+
+        $result = mysql_query("SELECT name, price, color FROM ".DEFAULT_TABLENAME." WHERE name like \"%ang%\"", $conn);
+				$this->assertEquals(mysql_fetch_array($result), array(FIELD_NAME=>"orange", FIELD_PRICE=>1500, FIELD_COLOR=>TEXT_GREEN));
+        $this->assertEquals(mysql_fetch_array($result), array(FIELD_NAME=>"mango", FIELD_PRICE=>1200, FIELD_COLOR=>TEXT_YELLOW));
+        $this->assertEquals(mysql_affected_rows($conn), 2);
+
+        mysql_close($conn);
+    }
+
+    /*
+		 * like 검색시 검색어%일경우 테스트
+     * @cover mysql_query
+     * @brief Select 쿼리에 like 사용시
+     */
+    public function test_like_select_where_right()
+    {
+        $conn = basicMockConnection($this, DEFAULT_TABLENAME, getFruitPriceTableStruct(), getFruitPriceTableDatas());
+
+        $result = mysql_query("SELECT name, price, color FROM ".DEFAULT_TABLENAME." WHERE name like \"a%\"", $conn);
+				$this->assertEquals(mysql_fetch_array($result), array(FIELD_NAME=>"apple", FIELD_PRICE=>1000, FIELD_COLOR=>TEXT_GREEN));
+        $this->assertEquals(mysql_affected_rows($conn), 1);
+
+        mysql_close($conn);
+    }
+
+    /*
+		 * like 검색시 %검색어일경우 테스트
+     * @cover mysql_query
+     * @brief Select 쿼리에 like 사용시
+     */
+    public function test_like_select_where_left()
+    {
+        $conn = basicMockConnection($this, DEFAULT_TABLENAME, getFruitPriceTableStruct(), getFruitPriceTableDatas());
+
+        $result = mysql_query("SELECT name, price, color FROM ".DEFAULT_TABLENAME." WHERE name like \"%e\"", $conn);
+				$this->assertEquals(mysql_fetch_array($result), array(FIELD_NAME=>"orange", FIELD_PRICE=>1500, FIELD_COLOR=>TEXT_GREEN));
+        $this->assertEquals(mysql_fetch_array($result), array(FIELD_NAME=>"apple", FIELD_PRICE=>1000, FIELD_COLOR=>TEXT_GREEN));
+        $this->assertEquals(mysql_affected_rows($conn), 2);
+
+        mysql_close($conn);
+    }
+}
