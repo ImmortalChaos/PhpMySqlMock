@@ -23,7 +23,7 @@ function _is_separate_query($txt) {
 }
 
 function _is_query_operater($txt) {
-	return ($txt=="=" || $txt=="!=" || $txt=="<" || $txt==">" || $txt=="<=" || $txt==">=");
+	return ($txt=="=" || $txt=="!=" || $txt=="<" || $txt==">" || $txt=="<=" || $txt==">=" || $txt=="like");
 }
 
 function _is_separate_and_operator($chr) {
@@ -421,6 +421,29 @@ class MySqlMockObject {
 		return $data[$condition[0]] != $val;
 	}
 
+	private function checkConditionLike($data, $condition) {
+		if(!$this->isValidParameter($condition)) {
+			return false;
+		}
+		$vals = is_string($condition[2])?trim($condition[2],"'\""):$condition[2];
+		$lp = substr($vals, 0, 1)=="%";
+		$rp = substr($vals, -1)=="%";
+		$val = trim($vals,"%");
+
+		$bFound = false;
+		if($lp && $rp) {
+			$bFound = strpos($data[$condition[0]], $val)!==false;
+		} else if($lp) {
+			$bFound = (($temp = strlen($data[$condition[0]]) - strlen($val)) >= 0 && strpos($data[$condition[0]], $val, $temp) !== false);
+		} else if($rp) {
+			$bFound = strrpos($data[$condition[0]], $val, -strlen($data[$condition[0]])) !== false;
+		} else {
+			$bFound = $data[$condition[0]]==$val;
+		}
+
+		return $bFound;
+	}
+
 	private function checkCondition($data, $condition) {
 		$ret = true;
 		if(count($condition)==1) {
@@ -434,6 +457,7 @@ class MySqlMockObject {
 			case ">" : $ret = $this->checkConditionGreaterThan($data, $condition); break;
 			case "=" : $ret = $this->checkConditionEqual($data, $condition); break;
 			case "!=" : $ret = $this->checkConditionNotEqual($data, $condition); break;
+			case "like" : $ret = $this->checkConditionLike($data, $condition); break;
 			default :
 				break;
 		}
